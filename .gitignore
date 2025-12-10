@@ -1,0 +1,9 @@
+*
+!*/
+!*.py
+!uv.lock
+!pyproject.toml
+!.gitignore
+
+.idea/*
+.venv/*
