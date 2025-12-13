@@ -4,7 +4,7 @@
 import sys
 import chess
 
-from search import AlphaBetaSearch
+from search import negamax
 
 
 def io_loop():
@@ -77,7 +77,8 @@ def start_search(command: str, board: chess.Board):
     else:
         inc = 0
 
-    move = AlphaBetaSearch(board).search(time, inc)
+    depth = 4 if (time / 10 + inc) >= 6 else 3
+    move = negamax(board, depth)[0]
     print(f"bestmove {move}")
 
 if __name__ == "__main__":

@@ -1,77 +1,37 @@
-import time
+# Done is better than perfect
+
+import math
 import chess
 from evaluation import evaluate_board
 
-MATE_SCORE = 1e9
+MATE_SCORE = 1e6
+MATE_THRESHOLD = 1e5
 
-class AlphaBetaSearch:
-    def __init__(self, board: chess.Board):
-        self.board = board
-        self.nodes_explored = 0
+def _negate_and_decay_score(score: float) -> float:
+    if abs(score) >= MATE_THRESHOLD:
+        return -math.copysign(abs(score) - 1, score)
+    return -score
 
 
-    def search(self, clock: int, inc: int) -> chess.Move:
-        t0 = time.time()
+def negamax(board: chess.Board, depth: int) -> tuple[chess.Move | None, float]:
+    if board.is_checkmate():
+        value = -MATE_SCORE if board.turn == chess.WHITE else MATE_SCORE
+        return None, value
 
-        depth = 4 if (inc + clock / 10) >= 6 else 3
+    if depth == 0:
+        return None, evaluate_board(board)
 
-        maximize = (self.board.turn == chess.WHITE)
-        best_value = float('-inf') if maximize else float('inf')
-        best_move = None
+    possible_moves = board.legal_moves
+    best_score, best_move = -float("inf"), None
 
-        moves = self._get_ordered_moves()
-        for move in moves:
-            self.board.push(move)
+    for move in possible_moves:
+        board.push(move)
+        _, opponent_score = negamax(board, depth - 1)
+        move_score = _negate_and_decay_score(opponent_score)
 
-            if self.board.can_claim_draw():
-                best_value = 0
-            else:
-                value = self._ab_search(float("-inf"), float("inf"), depth - 1, not maximize)
+        if move_score > best_score:
+            best_score, best_move = move_score, move
 
-                if (maximize and value > best_value) or (not maximize and value < best_value):
-                    best_value = value
-                    best_move = move
+        board.pop()
 
-            self.board.pop()
-
-        print(f"info time {time.time() - t0}")
-        print(f"info nodes {self.nodes_explored}")
-
-        return best_move
-
-    
-    def _ab_search(self, alpha: float, beta: float, depth: int, maximize: bool) -> float:
-        self.nodes_explored += 1
-        
-        if self.board.is_checkmate():
-            return -MATE_SCORE if maximize else MATE_SCORE
-        
-        if depth == 0:
-            return evaluate_board(self.board)
-
-        value = float("-inf") if maximize else float("inf")
-        moves = self._get_ordered_moves()
-
-        if maximize:
-            for move in moves:
-                self.board.push(move)
-                value = max(value, self._ab_search(alpha, beta, depth - 1, False))
-                self.board.pop()
-
-                if value >= beta:
-                    break
-                alpha = max(alpha, value)
-        else:
-            for move in moves:
-                self.board.push(move)
-                value = min(value, self._ab_search(alpha, beta, depth - 1, True))
-                self.board.pop()
-
-                if value <= alpha:
-                    break
-                beta = min(beta, value)
-
-        return value
-
-    def _get_ordered_moves(self) -> list[chess.Move]:
-        return list(self.board.legal_moves)
+    return best_move, best_score
