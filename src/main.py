@@ -1,10 +1,10 @@
 # Make it work then make it better
 # Code first, refactor second
 
-import sys
 import chess
+import sys
 
-from search import negamax
+from search import find_best_move
 
 
 def io_loop():
@@ -77,8 +77,9 @@ def start_search(command: str, board: chess.Board):
     else:
         inc = 0
 
-    depth = 4 if (time / 10 + inc) >= 6 else 3
-    move = negamax(board, depth)[0]
+    depth = 4 if (time / 10 + inc) >= 15 else 3
+    print(f"info depth {depth}")
+    move = find_best_move(board, depth)
     print(f"bestmove {move}")
 
 if __name__ == "__main__":
