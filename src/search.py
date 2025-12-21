@@ -5,7 +5,7 @@ import math
 import time
 
 from bulletchess import Board, Move, CHECKMATE
-# from bulletchess.utils import evaluate
+from bulletchess.utils import evaluate
 from evaluation import evaluate_board
 
 # Constants
@@ -42,12 +42,12 @@ def find_best_move(board: Board, depth: int) -> Move:
         if score > best_score:
             best_move, best_score = move, score
 
-    delta = round(time.time() - t0, 2)
+    delta = int((time.time() - t0) * 1000)
     print(f"info depth {depth} nodes {nodes} cache hits {cache_hits} time {delta} score cp {best_score}")
     return best_move
 
 
-def negamax(board: Board, depth: int, alpha: float, beta: float) -> float:
+def negamax(board: Board, depth: int, alpha: float, beta: float, fast_eval: bool=True) -> float:
     global nodes, cache_hits
     nodes += 1
 
@@ -64,8 +64,12 @@ def negamax(board: Board, depth: int, alpha: float, beta: float) -> float:
         return -MATE_SCORE
 
     if depth == 0:
-        # evaluation = evaluate(board)
-        evaluation = evaluate_board(board)
+        # Shannon's eval is 7x faster, but decisively worse in SPRT.
+        # Might use in the future when balancing evaluation speed and search depth.
+        if fast_eval:
+            evaluation = evaluate(board)
+        else:
+            evaluation = evaluate_board(board)
         value = evaluation if board.turn == bulletchess.WHITE else -evaluation
         return value
 

@@ -1,9 +1,18 @@
 *
+
+# directories
 !*/
+
+# source
 !*.py
+
+# project
 !uv.lock
 !pyproject.toml
 !.gitignore
+
+# assets
+!*.pgn
 
 .idea/*
 .venv/*

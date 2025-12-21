@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 # Make it work then make it better
 # Code first, refactor second
 
