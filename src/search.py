@@ -4,7 +4,7 @@ import bulletchess
 import math
 import time
 
-from bulletchess import Board, Move, CHECKMATE
+from bulletchess import Board, Move, CHECKMATE, DRAW
 from bulletchess.utils import evaluate
 from evaluation import evaluate_board
 
@@ -50,6 +50,10 @@ def find_best_move(board: Board, depth: int) -> Move:
 def negamax(board: Board, depth: int, alpha: float, beta: float, fast_eval: bool=True) -> float:
     global nodes, cache_hits
     nodes += 1
+
+    # around a 6% overhead
+    if board in DRAW:
+        return 0.0
 
     board_hash = hash(board)
     tt_index = board_hash % TT_SIZE
