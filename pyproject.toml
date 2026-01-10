@@ -2,5 +2,7 @@
 name = "chessengine"
 version = "0.1.0"
 description = "Add your description here"
-requires-python = ">=3.14"
-dependencies = []
+requires-python = ">=3.15"
+dependencies = [
+    "bulletchess>=0.4.0",
+]

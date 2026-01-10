@@ -1,8 +1,20 @@
 version = 1
 revision = 3
-requires-python = ">=3.14"
+requires-python = ">=3.15"
+
+[[package]]
+name = "bulletchess"
+version = "0.4.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/9f/59/9159194e4b6ca8beafb0e1cf9f048ca679c5f683a472daa2338666bda863/bulletchess-0.4.0.tar.gz", hash = "sha256:a3ba3c29208039cc12e388da377e493406afa74cde26f9756b1d1c6563a130fb", size = 114306, upload-time = "2025-09-07T03:14:19.823Z" }
 
 [[package]]
 name = "chessengine"
 version = "0.1.0"
 source = { virtual = "." }
+dependencies = [
+    { name = "bulletchess" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "bulletchess", specifier = ">=0.4.0" }]
