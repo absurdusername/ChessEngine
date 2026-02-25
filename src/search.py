@@ -1,7 +1,6 @@
 # Done is better than perfect
 
 import bulletchess
-import math
 import time
 
 from bulletchess import Board, Move, CHECKMATE, DRAW
@@ -13,59 +12,94 @@ MATE_SCORE = 1e6
 MATE_THRESHOLD = 1e5
 TT_SIZE = 10_000_000
 
-# Le Transposition Table | hash -> (hash, depth, evaluation)
-TT: list[tuple | None] = [None] * TT_SIZE
+# Le Transposition Table | hash -> (hash, depth, best_move, score)
 # Probably should make this optional, because it contributes a decrease in perf for now
+TT: list[tuple | None] = [None] * TT_SIZE
 
-# Metrics
-nodes = cache_hits = 0
+
+class SearchContext:
+    def __init__(self, deadline: float):
+        self.deadline = deadline
+
+        # stats
+        self.nodes_searched = 0
+        self.cache_hits = 0
+        self._t0 = time.time()
+
+    @property
+    def is_expired(self) -> bool:
+        """Did we overrun the deadline?"""
+        return time.time() > self.deadline
+
+    @property
+    def time_elapsed(self) -> int:
+        """Time elapsed since initialization in milliseconds."""
+        return int((time.time() - self._t0) * 1000)
+
 
 def _decay_mate_score(score: float) -> float:
-    if abs(score) >= MATE_THRESHOLD:
-        return math.copysign(abs(score) - 1, score)
+    if score < -MATE_THRESHOLD:
+        return score + 1
+
+    if score > MATE_THRESHOLD:
+        return score - 1
+
     return score
 
 
-def find_best_move(board: Board, depth: int) -> Move:
-    global nodes, cache_hits
-    t0 = time.time()
-    nodes = cache_hits = 0
+def find_best_move(board: Board, move_time: float) -> Move:
+    deadline = time.time() + move_time
+    best_move = None
 
-    possible_moves = board.legal_moves()
-    best_move, best_score = None, float("-inf")
+    for depth in range(1, 100):
+        context = SearchContext(deadline)
 
-    for move in possible_moves:
-        board.apply(move)
-        score = -negamax(board, depth - 1, -float("inf"), float("inf"))
-        board.undo()
+        move, score = negamax(
+            board, depth, alpha=-float("inf"), beta=float("inf"), context=context
+        )
 
-        if score > best_score:
-            best_move, best_score = move, score
+        if not context.is_expired:
+            best_move = move
 
-    delta = int((time.time() - t0) * 1000)
-    print(f"info depth {depth} nodes {nodes} cache hits {cache_hits} time {delta} score cp {best_score}")
+        status = "(incomplete)" if context.is_expired else ""
+        print(f"info depth {depth} nodes {context.nodes_searched} cache hits {context.cache_hits} "
+              f"time {context.time_elapsed} score cp {score} {status}")
+
+        if context.is_expired:
+            break
+
     return best_move
 
 
-def negamax(board: Board, depth: int, alpha: float, beta: float, fast_eval: bool=True) -> float:
-    global nodes, cache_hits
-    nodes += 1
+def negamax(
+        board: Board,
+        depth: int,
+        alpha: float,
+        beta: float,
+        context: SearchContext,
+        fast_eval: bool = True
+) -> tuple[Move | None, float]:
+    """Reference: https://www.dogeystamp.com/chess4/"""
+
+    if context.is_expired:
+        return None, 0.0
+
+    context.nodes_searched += 1
 
     # around a 6% overhead
     if board in DRAW:
-        return 0.0
+        return None, 0.0
+
+    if board in CHECKMATE:
+        return None, -MATE_SCORE
+    # minus sign because position is evaluated from current player's perspective
 
     board_hash = hash(board)
     tt_index = board_hash % TT_SIZE
-
     entry = TT[tt_index]
     if entry and entry[0] == board_hash and entry[1] >= depth:
-        cache_hits += 1
-        return entry[2]
-
-    if board in CHECKMATE:
-        # position must be evaluated from current player's perspective
-        return -MATE_SCORE
+        context.cache_hits += 1
+        return entry[2], entry[3]
 
     if depth == 0:
         # Shannon's eval is 7x faster, but decisively worse in SPRT.
@@ -75,24 +109,29 @@ def negamax(board: Board, depth: int, alpha: float, beta: float, fast_eval: bool
         else:
             evaluation = evaluate_board(board)
         value = evaluation if board.turn == bulletchess.WHITE else -evaluation
-        return value
+        return None, value
 
     possible_moves = board.legal_moves()
-    best_score = -float("inf")
+    best_score, best_move = -float("inf"), None
 
     for move in possible_moves:
         board.apply(move)
-        move_score = -negamax(board, depth - 1, -beta, -alpha)
+        opponent_move, opponent_score = negamax(
+            board, depth - 1, -beta, -alpha,
+            context=context, fast_eval=fast_eval
+        )
         board.undo()
 
-        move_score = _decay_mate_score(move_score)
+        our_score = -opponent_score
+        our_score = _decay_mate_score(our_score)
 
-        if move_score > best_score:
-            best_score = move_score
+        if our_score > best_score:
+            best_score, best_move = our_score, move
 
-        alpha = max(alpha, move_score)
-        if move_score >= beta:
+        if our_score >= beta:
             break
 
-    TT[tt_index] = (board_hash, depth, best_score)
-    return best_score
+        alpha = max(alpha, our_score)
+
+    TT[tt_index] = (board_hash, depth, best_move, best_score)
+    return best_move, best_score

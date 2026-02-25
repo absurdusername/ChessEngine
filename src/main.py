@@ -68,19 +68,20 @@ def start_search(command: str):
     inc_identifier = "winc" if board.turn == bulletchess.WHITE else "binc"
 
     if time_identifier in tokens:
-        time = int(tokens[tokens.index(time_identifier) + 1])
+        time_left = int(tokens[tokens.index(time_identifier) + 1])
     else:
-        time = 10_000
+        time_left = 10_000 # 10 seconds
 
     if inc_identifier in tokens:
         inc = int(tokens[tokens.index(inc_identifier) + 1])
     else:
         inc = 0
 
-    move_time = (time / 10 + inc)
-    depth = 5 if move_time >= 15_000 else 4 if move_time >= 4_000 else 3
+    move_time = (time_left // 20 + inc)
+    move_time = min(move_time, time_left // 2) # to avoid overrunning the clock
+    move_time = move_time / 1000 # milliseconds to seconds
 
-    move = find_best_move(board, depth)
+    move = find_best_move(board, move_time)
     print(f"bestmove {move}")
 
 if __name__ == "__main__":
