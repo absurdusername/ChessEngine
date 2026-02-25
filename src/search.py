@@ -14,7 +14,32 @@ TT_SIZE = 10_000_000
 
 # Le Transposition Table | hash -> (hash, depth, best_move, score)
 # Probably should make this optional, because it contributes a decrease in perf for now
-TT: list[tuple | None] = [None] * TT_SIZE
+class TranspositionTable:
+    def __init__(self, size: int):
+        self.size = size
+        self.table: list[tuple | None] = [None] * size
+
+    def get(self, board: Board, depth: int) -> tuple[Move, int] | None:
+        board_hash = hash(board)
+        index = board_hash % self.size
+        entry = self.table[index]
+
+        if entry and entry[0] == board_hash and entry[1] >= depth:
+            return entry[2], entry[3]
+        return None
+
+    def store(self, board: Board, depth: int, move: Move | None, score: float):
+        board_hash = hash(board)
+        index = board_hash % self.size
+        entry = self.table[index]
+        
+        if entry is None or depth >= entry[1]:
+            self.table[index] = (board_hash, depth, move, score)
+
+    def clear(self):
+        self.table = [None] * self.size
+
+TT = TranspositionTable(TT_SIZE)
 
 
 class SearchContext:
@@ -94,12 +119,10 @@ def negamax(
         return None, -MATE_SCORE
     # minus sign because position is evaluated from current player's perspective
 
-    board_hash = hash(board)
-    tt_index = board_hash % TT_SIZE
-    entry = TT[tt_index]
-    if entry and entry[0] == board_hash and entry[1] >= depth:
+    result = TT.get(board, depth)
+    if result is not None:
         context.cache_hits += 1
-        return entry[2], entry[3]
+        return result[0], result[1]
 
     if depth == 0:
         # Shannon's eval is 7x faster, but decisively worse in SPRT.
@@ -133,5 +156,5 @@ def negamax(
 
         alpha = max(alpha, our_score)
 
-    TT[tt_index] = (board_hash, depth, best_move, best_score)
+    TT.store(board, depth, best_move, best_score)
     return best_move, best_score
