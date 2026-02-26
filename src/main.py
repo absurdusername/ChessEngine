@@ -77,7 +77,7 @@ def start_search(command: str):
     else:
         inc = 0
 
-    move_time = (time_left // 20 + inc)
+    move_time = (time_left // 20 + inc // 2)
     move_time = min(move_time, time_left // 2) # to avoid overrunning the clock
     move_time = move_time / 1000 # milliseconds to seconds
 
