@@ -5,7 +5,7 @@ import bulletchess
 import sys
 
 from bulletchess import Board, Move
-from search import find_best_move
+from search import Search
 
 
 def io_loop():
@@ -81,9 +81,10 @@ def start_search(command: str):
     move_time = min(move_time, time_left // 2) # to avoid overrunning the clock
     move_time = move_time / 1000 # milliseconds to seconds
 
-    move = find_best_move(board, move_time)
+    move = search.find_best_move(board, move_time)
     print(f"bestmove {move}")
 
 if __name__ == "__main__":
+    search = Search()
     board = Board()
     io_loop()
