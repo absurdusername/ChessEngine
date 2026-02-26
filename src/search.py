@@ -12,6 +12,7 @@ MATE_SCORE = 1e6
 MATE_THRESHOLD = 1e5
 TT_SIZE = 10_000_000
 
+
 # Le Transposition Table | hash -> (hash, depth, best_move, score)
 # Probably should make this optional, because it contributes a decrease in perf for now
 class TranspositionTable:
@@ -32,12 +33,13 @@ class TranspositionTable:
         board_hash = hash(board)
         index = board_hash % self.size
         entry = self.table[index]
-        
+
         if entry is None or depth >= entry[1]:
             self.table[index] = (board_hash, depth, move, score)
 
     def clear(self):
         self.table = [None] * self.size
+
 
 TT = TranspositionTable(TT_SIZE)
 
@@ -104,7 +106,14 @@ def negamax(
         context: SearchContext,
         fast_eval: bool = True
 ) -> tuple[Move | None, float]:
-    """Reference: https://www.dogeystamp.com/chess4/"""
+    """
+    Reference: https://www.dogeystamp.com/chess4/
+
+    Every negamax call is essentially a bounded search-request.
+    * Score within [alpha, beta] -> useful result
+    * Score < alpha -> all moves were bad, caller ignores it
+    * Score > beta -> cutoff, caller ignores it
+    """
 
     if context.is_expired:
         return None, 0.0
@@ -125,14 +134,7 @@ def negamax(
         return result[0], result[1]
 
     if depth == 0:
-        # Shannon's eval is 7x faster, but decisively worse in SPRT.
-        # Might use in the future when balancing evaluation speed and search depth.
-        if fast_eval:
-            evaluation = evaluate(board)
-        else:
-            evaluation = evaluate_board(board)
-        value = evaluation if board.turn == bulletchess.WHITE else -evaluation
-        return None, value
+        return None, quiescence(board, alpha, beta, context, fast_eval)
 
     possible_moves = board.legal_moves()
     best_score, best_move = -float("inf"), None
@@ -158,3 +160,50 @@ def negamax(
 
     TT.store(board, depth, best_move, best_score)
     return best_move, best_score
+
+
+def quiescence(
+        board: Board,
+        alpha: float,
+        beta: float,
+        context: SearchContext,
+        fast_eval: bool = True
+) -> float:
+    if context.is_expired:
+        return 0.0
+
+    context.nodes_searched += 1
+
+    if board in DRAW:
+        return 0.0
+
+    if board in CHECKMATE:
+        return -MATE_SCORE
+
+    # Shannon's eval is 7x faster, but decisively worse in SPRT.
+    # Might use in the future when balancing evaluation speed and search depth.
+    if fast_eval:
+        evaluation = evaluate(board)
+    else:
+        evaluation = evaluate_board(board)
+    standing_pat = evaluation if board.turn == bulletchess.WHITE else -evaluation
+
+    if standing_pat >= beta:
+        return standing_pat
+
+    alpha = max(alpha, standing_pat)
+
+    for move in board.legal_moves():
+        if not move.is_capture(board):
+            continue
+
+        board.apply(move)
+        score = -quiescence(board, -beta, -alpha, context, fast_eval)
+        board.undo()
+
+        if score >= beta:
+            return score
+
+        alpha = max(alpha, score)
+
+    return alpha
