@@ -93,9 +93,13 @@ def _move_score(move: Move, board: Board, tt_move: Move | None) -> int:
     return 0
 
 
-def _get_ordered_moves(board: Board) -> list[Move]:
+def _get_ordered_moves(board: Board, captures_only: bool = False) -> list[Move]:
     tt_move = TT.get_move_hint(board)  # the best move from a previous shallower search
     moves = board.legal_moves()
+
+    if captures_only:
+        moves = [move for move in moves if move.is_capture(board)]
+
     moves.sort(
         key=lambda m: _move_score(m, board, tt_move),
         reverse=True
@@ -209,9 +213,10 @@ def quiescence(
     if standing_pat >= beta:
         return standing_pat
 
+    possible_moves = _get_ordered_moves(board, captures_only=True)
     alpha = max(alpha, standing_pat)
 
-    for move in board.legal_moves():
+    for move in possible_moves:
         if not move.is_capture(board):
             continue
 
