@@ -6,6 +6,7 @@ import time
 from bulletchess import Board, Move, CHECKMATE, DRAW
 from bulletchess.utils import evaluate
 from evaluation import evaluate_board
+from pst import piece_value
 
 # Constants
 MATE_SCORE = 1e6
@@ -20,7 +21,8 @@ class TranspositionTable:
         self.size = size
         self.table: list[tuple | None] = [None] * size
 
-    def get(self, board: Board, depth: int) -> tuple[Move, int] | None:
+    def get_cached_result(self, board: Board, depth: int) -> tuple[Move, int] | None:
+        """Returns (move, score) if the cached result was computed at a sufficient depth."""
         board_hash = hash(board)
         index = board_hash % self.size
         entry = self.table[index]
@@ -40,6 +42,14 @@ class TranspositionTable:
     def clear(self):
         self.table = [None] * self.size
 
+    def get_move_hint(self, board: Board) -> Move | None:
+        board_hash = hash(board)
+        index = board_hash % self.size
+        entry = self.table[index]
+
+        if entry and entry[0] == board_hash:
+            return entry[2]
+        return None
 
 TT = TranspositionTable(TT_SIZE)
 
@@ -62,6 +72,35 @@ class SearchContext:
     def time_elapsed(self) -> int:
         """Time elapsed since initialization in milliseconds."""
         return int((time.time() - self._t0) * 1000)
+
+
+def _move_score(move: Move, board: Board, tt_move: Move | None) -> int:
+    if move == tt_move:
+        return 1_000_000
+
+    # MVV-LVA
+    if move.is_capture(board):
+        victim = board[move.destination]
+        attacker = board[move.origin]
+
+        # if victim is absent, it's a pawn (en passant)
+        victim_value = piece_value[victim.piece_type] if victim else piece_value[bulletchess.PAWN]
+        attacker_value = piece_value[attacker.piece_type]
+
+        # attacker_value is divided by 100 because we want victim_value to always take preference in ranking
+        return victim_value - attacker_value // 100
+
+    return 0
+
+
+def _get_ordered_moves(board: Board) -> list[Move]:
+    tt_move = TT.get_move_hint(board) # the best move from a previous shallower search
+    moves = board.legal_moves()
+    moves.sort(
+        key=lambda m: _move_score(m, board, tt_move),
+        reverse=True
+    )
+    return moves
 
 
 def _decay_mate_score(score: float) -> float:
@@ -128,7 +167,7 @@ def negamax(
         return None, -MATE_SCORE
     # minus sign because position is evaluated from current player's perspective
 
-    result = TT.get(board, depth)
+    result = TT.get_cached_result(board, depth)
     if result is not None:
         context.cache_hits += 1
         return result[0], result[1]
@@ -136,7 +175,7 @@ def negamax(
     if depth == 0:
         return None, quiescence(board, alpha, beta, context, fast_eval)
 
-    possible_moves = board.legal_moves()
+    possible_moves = _get_ordered_moves(board)
     best_score, best_move = -float("inf"), None
 
     for move in possible_moves:
