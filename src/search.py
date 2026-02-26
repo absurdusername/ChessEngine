@@ -15,47 +15,47 @@ TT_SIZE = 10_000_000
 
 
 # Le Transposition Table | hash -> (hash, depth, best_move, score)
-# Probably should make this optional, because it contributes a decrease in perf for now
 class TranspositionTable:
     def __init__(self, size: int):
         self.size = size
         self.table: list[tuple | None] = [None] * size
 
+    def store(self, board: Board, depth: int, move: Move | None, score: float):
+        board_hash, index, entry = self._lookup(board)
+        if entry is None or depth >= entry[1]:
+            self.table[index] = (board_hash, depth, move, score)
+
     def get_cached_result(self, board: Board, depth: int) -> tuple[Move, int] | None:
         """Returns (move, score) if the cached result was computed at a sufficient depth."""
-        board_hash = hash(board)
-        index = board_hash % self.size
-        entry = self.table[index]
-
+        board_hash, _, entry = self._lookup(board)
         if entry and entry[0] == board_hash and entry[1] >= depth:
             return entry[2], entry[3]
         return None
 
-    def store(self, board: Board, depth: int, move: Move | None, score: float):
-        board_hash = hash(board)
-        index = board_hash % self.size
-        entry = self.table[index]
-
-        if entry is None or depth >= entry[1]:
-            self.table[index] = (board_hash, depth, move, score)
-
-    def clear(self):
-        self.table = [None] * self.size
-
     def get_move_hint(self, board: Board) -> Move | None:
-        board_hash = hash(board)
-        index = board_hash % self.size
-        entry = self.table[index]
-
+        """Returns ANY cached move for the given position, regardless of depth."""
+        board_hash, _, entry = self._lookup(board)
         if entry and entry[0] == board_hash:
             return entry[2]
         return None
 
+    def clear(self):
+        self.table = [None] * self.size
+
+    def _lookup(self, board: Board) -> tuple[int, int, tuple | None]:
+        """Returns (board_hash, index, entry) for the given board position."""
+        board_hash = hash(board)
+        index = board_hash % self.size
+        return board_hash, index, self.table[index]
+
+
+# TO-DO: should probably toss this global into SearchContext
 TT = TranspositionTable(TT_SIZE)
 
 
 class SearchContext:
     def __init__(self, deadline: float):
+        # keeping track of time
         self.deadline = deadline
 
         # stats
@@ -94,7 +94,7 @@ def _move_score(move: Move, board: Board, tt_move: Move | None) -> int:
 
 
 def _get_ordered_moves(board: Board) -> list[Move]:
-    tt_move = TT.get_move_hint(board) # the best move from a previous shallower search
+    tt_move = TT.get_move_hint(board)  # the best move from a previous shallower search
     moves = board.legal_moves()
     moves.sort(
         key=lambda m: _move_score(m, board, tt_move),
@@ -111,30 +111,6 @@ def _decay_mate_score(score: float) -> float:
         return score - 1
 
     return score
-
-
-def find_best_move(board: Board, move_time: float) -> Move:
-    deadline = time.time() + move_time
-    best_move = None
-
-    for depth in range(1, 100):
-        context = SearchContext(deadline)
-
-        move, score = negamax(
-            board, depth, alpha=-float("inf"), beta=float("inf"), context=context
-        )
-
-        if not context.is_expired:
-            best_move = move
-
-        status = "(incomplete)" if context.is_expired else ""
-        print(f"info depth {depth} nodes {context.nodes_searched} cache hits {context.cache_hits} "
-              f"time {context.time_elapsed} score cp {score} {status}")
-
-        if context.is_expired:
-            break
-
-    return best_move
 
 
 def negamax(
@@ -208,6 +184,9 @@ def quiescence(
         context: SearchContext,
         fast_eval: bool = True
 ) -> float:
+    """
+    Reference: https://www.chessprogramming.org/Quiescence_Search#Pseudo_Code
+    """
     if context.is_expired:
         return 0.0
 
@@ -246,3 +225,27 @@ def quiescence(
         alpha = max(alpha, score)
 
     return alpha
+
+
+def find_best_move(board: Board, move_time: float) -> Move:
+    deadline = time.time() + move_time
+    best_move = None
+
+    for depth in range(1, 100):
+        context = SearchContext(deadline)
+
+        move, score = negamax(
+            board, depth, alpha=-float("inf"), beta=float("inf"), context=context
+        )
+
+        if not context.is_expired:
+            best_move = move
+
+        status = "(incomplete)" if context.is_expired else ""
+        print(f"info depth {depth} nodes {context.nodes_searched} cache hits {context.cache_hits} "
+              f"time {context.time_elapsed} score cp {score} {status}")
+
+        if context.is_expired:
+            break
+
+    return best_move
