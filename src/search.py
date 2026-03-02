@@ -7,8 +7,10 @@ from bulletchess.utils import evaluate
 from pst import piece_value
 from tt import TranspositionTable
 
-MATE_SCORE = 1e6
-MATE_THRESHOLD = 1e5
+MATE_SCORE = 1_000_000
+MATE_THRESHOLD = 900_000
+INF = 2_000_000
+
 TT_SIZE = 10_000_000  # size of the transposition table
 DELTA_MARGIN = 200  # used for delta pruning in quiescence
 
@@ -30,7 +32,7 @@ class Search:
             self.cache_hits = 0
             self._t0 = time.time()
 
-            move, score = self.negamax(board, depth, -float("inf"), float("inf"))
+            move, score = self.negamax(board, depth, -INF, INF)
 
             elapsed = int((time.time() - self._t0) * 1000)
             tag = "(incomplete)" if self.is_expired else ""
@@ -43,7 +45,7 @@ class Search:
 
         return best_move
 
-    def negamax(self, board: Board, depth: int, alpha: float, beta: float) -> tuple[Move | None, float]:
+    def negamax(self, board: Board, depth: int, alpha: int, beta: int) -> tuple[Move | None, int]:
         """
         Reference: https://www.dogeystamp.com/chess4/
 
@@ -53,13 +55,13 @@ class Search:
         * Score > beta -> cutoff, caller ignores it
         """
         if self.is_expired:
-            return None, 0.0
+            return None, 0
 
         self.nodes += 1
 
         # around a 6% overhead
         if board in DRAW:
-            return None, 0.0
+            return None, 0
 
         if board in CHECKMATE:
             return None, -MATE_SCORE
@@ -87,7 +89,7 @@ class Search:
                 return None, our_score
 
         possible_moves = self.get_ordered_moves(board)
-        best_score, best_move = -float("inf"), None
+        best_score, best_move = -INF, None
 
         for i, move in enumerate(possible_moves):
             # LMR: reduce depth for late _quiet_ moves
@@ -117,17 +119,17 @@ class Search:
         self.tt.store(board, depth, best_move, best_score)
         return best_move, best_score
 
-    def quiescence(self, board: Board, alpha: float, beta: float) -> float:
+    def quiescence(self, board: Board, alpha: int, beta: int) -> int:
         """
         Reference: https://www.chessprogramming.org/Quiescence_Search#Pseudo_Code
         """
         if self.is_expired:
-            return 0.0
+            return 0
 
         self.nodes += 1
 
         if board in DRAW:
-            return 0.0
+            return 0
 
         if board in CHECKMATE:
             return -MATE_SCORE
@@ -159,7 +161,7 @@ class Search:
 
         return alpha
 
-    def _move_score(self, move: Move, board: Board, tt_move: Move) -> int:
+    def _move_score(self, move: Move, board: Board, tt_move: Move | None) -> int:
         if move == tt_move:
             return 1_000_000
 
@@ -195,7 +197,7 @@ class Search:
         return time.time() > self.deadline
 
     @staticmethod
-    def _decay_mate_score(score: float) -> float:
+    def _decay_mate_score(score: int) -> int:
         if score > MATE_THRESHOLD:
             return score - 1
         if score < -MATE_THRESHOLD:

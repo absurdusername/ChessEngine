@@ -6,7 +6,7 @@ class TranspositionTable:
         self.size = size
         self.table: list[tuple | None] = [None] * size
 
-    def store(self, board: Board, depth: int, move: Move | None, score: float):
+    def store(self, board: Board, depth: int, move: Move, score: int):
         board_hash, index, entry = self._lookup(board)
         if entry is None or depth >= entry[1]:
             self.table[index] = (board_hash, depth, move, score)
