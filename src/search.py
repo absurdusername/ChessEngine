@@ -1,7 +1,7 @@
 import time
 
 import bulletchess
-from bulletchess import Board, Move, CHECKMATE, DRAW, PAWN
+from bulletchess import Board, Move, CHECK, CHECKMATE, DRAW, PAWN
 from bulletchess.utils import evaluate
 
 from pst import piece_value
@@ -73,12 +73,34 @@ class Search:
         if depth == 0:
             return None, self.quiescence(board, alpha, beta)
 
+        # Null-move pruning: skip our turn and search shallower
+        # still finding moves that are too good after skipping a turn => prune
+        # search with a tiny window [beta-1, beta] to just check for a beta-cutoff
+        # could've used [beta, beta], but sticking with the formulas for now
+        if depth >= 3 and board not in CHECK and abs(beta) < MATE_THRESHOLD:
+            board.apply(None)  # skips our turn
+            _, opponent_score = self.negamax(board, depth - 3, -beta, -beta + 1)
+            board.undo()
+
+            our_score = -opponent_score
+            if our_score >= beta:
+                return None, our_score
+
         possible_moves = self.get_ordered_moves(board)
         best_score, best_move = -float("inf"), None
 
-        for move in possible_moves:
+        for i, move in enumerate(possible_moves):
+            # LMR: reduce depth for late _quiet_ moves
+            reduced = (depth >= 3 and i >= 3
+                       and not move.is_capture(board) and board not in CHECK)
+
             board.apply(move)
-            _, opponent_score = self.negamax(board, depth - 1, -beta, -alpha)
+            _, opponent_score = self.negamax(board, depth - 2 if reduced else depth - 1, -beta, -alpha)
+
+            # re-search at full depth if the reduced search beat alpha
+            if reduced and -opponent_score > alpha:
+                _, opponent_score = self.negamax(board, depth - 1, -beta, -alpha)
+
             board.undo()
 
             our_score = -opponent_score
