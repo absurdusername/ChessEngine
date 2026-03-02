@@ -5,7 +5,7 @@ from bulletchess import Board, Move, CHECK, CHECKMATE, DRAW, PAWN
 from bulletchess.utils import evaluate
 
 from pst import piece_value
-from tt import TranspositionTable
+from tt import TranspositionTable, ScoreFlag
 
 MATE_SCORE = 1_000_000
 MATE_THRESHOLD = 900_000
@@ -67,18 +67,21 @@ class Search:
             return None, -MATE_SCORE
         # minus sign because position is evaluated from current player's perspective
 
-        cached = self.tt.get_cached_result(board, depth)
+        cached = self.tt.get_cached_entry(board, depth)
         if cached is not None:
             self.cache_hits += 1
-            return cached[0], cached[1]
+            if (
+                cached.score_flag == ScoreFlag.EXACT
+                or cached.score_flag == ScoreFlag.UNDER_ESTIMATE and cached.score >= beta
+                or cached.score_flag == ScoreFlag.OVER_ESTIMATE and cached.score <= alpha
+            ):
+                return cached.best_move, cached.score
 
         if depth == 0:
             return None, self.quiescence(board, alpha, beta)
 
         # Null-move pruning: skip our turn and search shallower
         # still finding moves that are too good after skipping a turn => prune
-        # search with a tiny window [beta-1, beta] to just check for a beta-cutoff
-        # could've used [beta, beta], but sticking with the formulas for now
         if depth >= 3 and board not in CHECK and abs(beta) < MATE_THRESHOLD:
             board.apply(None)  # skips our turn
             _, opponent_score = self.negamax(board, depth - 3, -beta, -beta + 1)
@@ -90,6 +93,7 @@ class Search:
 
         possible_moves = self.get_ordered_moves(board)
         best_score, best_move = -INF, None
+        alpha_orig = alpha  # saving original value for TT-related stuff later
 
         for i, move in enumerate(possible_moves):
             # LMR: reduce depth for late _quiet_ moves
@@ -116,7 +120,15 @@ class Search:
 
             alpha = max(alpha, score)
 
-        self.tt.store(board, depth, best_move, best_score)
+        if not self.is_expired:
+            if best_score <= alpha_orig:
+                flag = ScoreFlag.OVER_ESTIMATE
+            elif best_score >= beta:
+                flag = ScoreFlag.UNDER_ESTIMATE
+            else:
+                flag = ScoreFlag.EXACT
+            self.tt.store(board, depth, best_move, best_score, flag)
+
         return best_move, best_score
 
     def quiescence(self, board: Board, alpha: int, beta: int) -> int:
