@@ -54,19 +54,15 @@ class Search:
         * Score < alpha -> all moves were bad, caller ignores it
         * Score > beta -> cutoff, caller ignores it
         """
-        if self.is_expired:
-            return None, 0
+        if self.is_expired: return None, 0
+        self.nodes += 1  # increment node counter
 
-        self.nodes += 1
+        if board in DRAW: return None, 0
 
-        # around a 6% overhead
-        if board in DRAW:
-            return None, 0
-
-        if board in CHECKMATE:
-            return None, -MATE_SCORE
+        if board in CHECKMATE: return None, -MATE_SCORE
         # minus sign because position is evaluated from current player's perspective
 
+        # query the transposition table for a precomputed result
         cached = self.tt.get_cached_entry(board, depth)
         if cached is not None:
             self.cache_hits += 1
@@ -77,12 +73,15 @@ class Search:
             ):
                 return cached.best_move, cached.score
 
-        if depth == 0:
-            return None, self.quiescence(board, alpha, beta)
+        # depth exhausted => start quiescence search
+        if depth == 0: return None, self.quiescence(board, alpha, beta)
+
+        # used repeatedly later
+        in_check = board in CHECK
 
         # Null-move pruning: skip our turn and search shallower
         # still finding moves that are too good after skipping a turn => prune
-        if depth >= 3 and board not in CHECK and abs(beta) < MATE_THRESHOLD:
+        if depth >= 3 and not in_check and abs(beta) < MATE_THRESHOLD:
             board.apply(None)  # skips our turn
             _, opponent_score = self.negamax(board, depth - 3, -beta, -beta + 1)
             board.undo()
@@ -97,27 +96,26 @@ class Search:
 
         for i, move in enumerate(possible_moves):
             # LMR: reduce depth for late _quiet_ moves
-            reduced = (depth >= 3 and i >= 3
-                       and not move.is_capture(board) and board not in CHECK)
+            is_reduced = (depth >= 3 and i >= 3
+                          and not move.is_capture(board) and not in_check)
+            new_depth = (depth - 2) if is_reduced else (depth - 1)
 
             board.apply(move)
-            _, opponent_score = self.negamax(board, depth - 2 if reduced else depth - 1, -beta, -alpha)
+            _, opponent_score = self.negamax(board, new_depth, -beta, -alpha)
+            our_score = -opponent_score
 
             # re-search at full depth if the reduced search beat alpha
-            if reduced and -opponent_score > alpha:
-                _, opponent_score = self.negamax(board, depth - 1, -beta, -alpha)
-
+            if is_reduced and our_score > alpha:
+                _, opponent_score = self.negamax(board, new_depth + 1, -beta, -alpha)
+                our_score = -opponent_score
             board.undo()
 
-            our_score = -opponent_score
+            # standard negamax bookkeeping
             score = self._decay_mate_score(our_score)
-
             if score > best_score:
                 best_score, best_move = score, move
-
             if score >= beta:
                 break
-
             alpha = max(alpha, score)
 
         if not self.is_expired:
@@ -151,7 +149,6 @@ class Search:
 
         if standing_pat >= beta:
             return standing_pat
-
         alpha = max(alpha, standing_pat)
 
         for move in self.get_ordered_moves(board, captures_only=True):
@@ -168,12 +165,12 @@ class Search:
 
             if score >= beta:
                 return score
-
             alpha = max(alpha, score)
 
         return alpha
 
-    def _move_score(self, move: Move, board: Board, tt_move: Move | None) -> int:
+    @staticmethod
+    def _move_score(move: Move, board: Board, tt_move: Move | None) -> int:
         if move == tt_move:
             return 1_000_000
 
