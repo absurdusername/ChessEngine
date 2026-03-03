@@ -4,7 +4,7 @@ import bulletchess
 from bulletchess import Board, Move, CHECK, CHECKMATE, DRAW, PAWN
 from bulletchess.utils import evaluate
 
-from pst import piece_value
+from pst import piece_value, piece_square_table
 from tt import TranspositionTable, ScoreFlag
 
 MATE_SCORE = 1_000_000
@@ -36,8 +36,8 @@ class Search:
 
             elapsed = int((time.time() - self._t0) * 1000)
             tag = "(incomplete)" if self.is_expired else ""
-            print(f"info depth {depth} nodes {self.nodes} cache hits {self.cache_hits} "
-                  f"time {elapsed} score cp {score} {tag}")
+            print(f"info depth {depth:<2} nodes {self.nodes:<7} cache hits {self.cache_hits:<6} "
+                  f"time {elapsed:<5} score cp {score:<3} {tag}")
 
             if self.is_expired:
                 break
@@ -177,19 +177,26 @@ class Search:
         if move == tt_move:
             return 1_000_000
 
+        attacker = board[move.origin]
+        attacker_value = piece_value[attacker.piece_type]
+
         # MVV-LVA
         if move.is_capture(board):
             victim = board[move.destination]
-            attacker = board[move.origin]
 
             # if victim is absent, it's a pawn (en passant)
             victim_value = piece_value[victim.piece_type] if victim else piece_value[PAWN]
-            attacker_value = piece_value[attacker.piece_type]
 
             # attacker_value is divided by 100 because we want victim_value to always take preference in ranking
             return victim_value - attacker_value // 100
 
-        return 0
+        # pieces flow along the PST gradient toward higher-potential squares
+        table = piece_square_table[attacker.piece_type]
+        origin_index, dest_index = move.origin.index(), move.destination.index()
+
+        if attacker.color == bulletchess.WHITE:
+            return table[-dest_index] - table[-origin_index]
+        return table[dest_index] - table[origin_index]
 
     def get_ordered_moves(self, board: Board, captures_only: bool = False) -> list[Move]:
         moves = board.legal_moves()
