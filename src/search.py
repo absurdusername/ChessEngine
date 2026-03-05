@@ -2,7 +2,7 @@ import time
 
 import bulletchess
 from bulletchess import Board, Move, CHECK, CHECKMATE, DRAW, PAWN
-from bulletchess.utils import evaluate
+from evaluation import evaluate_board
 
 from pst import piece_value, piece_square_table
 from tt import TranspositionTable, ScoreFlag
@@ -144,7 +144,7 @@ class Search:
         if board in CHECKMATE:
             return -MATE_SCORE
 
-        standing_pat = evaluate(board)
+        standing_pat = evaluate_board(board)
         standing_pat = standing_pat if board.turn == bulletchess.WHITE else -standing_pat
 
         if standing_pat >= beta:

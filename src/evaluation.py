@@ -6,7 +6,7 @@ from pst import piece_square_table, piece_value
 
 """https://www.chessprogramming.org/Simplified_Evaluation_Function"""
 
-def evaluate_board(board: Board) -> float:
+def evaluate_board(board: Board) -> int:
     total = 0
     end_game = _check_end_game(board)
 
@@ -22,7 +22,7 @@ def evaluate_board(board: Board) -> float:
     return total
 
 
-def _evaluate_piece(piece: bulletchess.Piece, square: bulletchess.Square, end_game: bool) -> float:
+def _evaluate_piece(piece: bulletchess.Piece, square: bulletchess.Square, end_game: bool) -> int:
     index = square.index()
 
     if piece.piece_type == bulletchess.KING:
