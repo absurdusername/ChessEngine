@@ -79,10 +79,9 @@ class Search:
         # still finding moves that are too good after skipping a turn => prune
         if depth >= 3 and not in_check and abs(beta) < MATE_THRESHOLD:
             board.apply(None)  # skips our turn
-            _, opponent_score = self.negamax(board, depth - 3, -beta, -beta + 1)
+            our_score = -self.negamax(board, depth - 3, -beta, -beta + 1)[1]
             board.undo()
 
-            our_score = -opponent_score
             if our_score >= beta:
                 return None, our_score
 
@@ -91,19 +90,24 @@ class Search:
         alpha_orig = alpha  # saving original value for TT-related stuff later
 
         for i, move in enumerate(possible_moves):
-            # LMR: reduce depth for late _quiet_ moves
-            is_reduced = (depth >= 3 and i >= 3
-                          and not move.is_capture(board) and not in_check)
-            new_depth = (depth - 2) if is_reduced else (depth - 1)
-
             board.apply(move)
-            _, opponent_score = self.negamax(board, new_depth, -beta, -alpha)
-            our_score = -opponent_score
+            new_depth = depth - 1
 
-            # re-search at full depth if the reduced search beat alpha
-            if is_reduced and our_score > alpha:
-                _, opponent_score = self.negamax(board, new_depth + 1, -beta, -alpha)
-                our_score = -opponent_score
+            # LMR: reduce depth for late quiet moves
+            if i >= 3 and depth >= 3 and not move.is_capture(board) and not in_check:
+                new_depth -= 1
+
+            # PVS: search PV-node with a full window, other moves with a zero window
+            if i == 0:
+                our_score = -self.negamax(board, depth - 1, -beta, -alpha)[1]
+            else:
+                # PVS: scout with a zero window to test if move beats alpha
+                our_score = -self.negamax(board, new_depth, -alpha - 1, -alpha)[1]
+
+                # PVS: re-search with full window if scout found something useful
+                if alpha < our_score < beta:
+                    our_score = -self.negamax(board, new_depth, -beta, -alpha)[1]
+
             board.undo()
 
             # standard negamax bookkeeping
