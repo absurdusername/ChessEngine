@@ -5,7 +5,7 @@ from bulletchess import Board, Move, CHECK, CHECKMATE, DRAW, PAWN
 from evaluation import evaluate_board
 
 from pst import piece_value, piece_square_table
-from tt import TranspositionTable, ScoreFlag
+from tt import TranspositionTable, TTEntry
 
 MATE_SCORE = 1_000_000
 MATE_THRESHOLD = 900_000
@@ -66,11 +66,7 @@ class Search:
         cached = self.tt.get_cached_entry(board, depth)
         if cached is not None:
             self.cache_hits += 1
-            if (
-                cached.score_flag == ScoreFlag.EXACT
-                or cached.score_flag == ScoreFlag.UNDER_ESTIMATE and cached.score >= beta
-                or cached.score_flag == ScoreFlag.OVER_ESTIMATE and cached.score <= alpha
-            ):
+            if cached.can_use_score(alpha, beta):
                 return cached.best_move, cached.score
 
         # depth exhausted => start quiescence search
@@ -119,12 +115,7 @@ class Search:
             alpha = max(alpha, score)
 
         if not self.is_expired:
-            if best_score <= alpha_orig:
-                flag = ScoreFlag.OVER_ESTIMATE
-            elif best_score >= beta:
-                flag = ScoreFlag.UNDER_ESTIMATE
-            else:
-                flag = ScoreFlag.EXACT
+            flag = TTEntry.flag_for(best_score, alpha_orig, beta)
             self.tt.store(board, depth, best_move, best_score, flag)
 
         return best_move, best_score

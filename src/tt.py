@@ -15,6 +15,21 @@ class TTEntry:
     score: int
     score_flag: ScoreFlag
 
+    def can_use_score(self, alpha: int, beta: int) -> bool:
+        return (
+            self.score_flag == ScoreFlag.EXACT
+            or self.score_flag == ScoreFlag.UNDER_ESTIMATE and self.score >= beta
+            or self.score_flag == ScoreFlag.OVER_ESTIMATE and self.score <= alpha
+        )
+
+    @staticmethod
+    def flag_for(score: int, alpha_orig: int, beta: int) -> ScoreFlag:
+        if score <= alpha_orig:
+            return ScoreFlag.OVER_ESTIMATE
+        if score >= beta:
+            return ScoreFlag.UNDER_ESTIMATE
+        return ScoreFlag.EXACT
+
 # Le Transposition Table | hash -> TTEntry
 class TranspositionTable:
     def __init__(self, size: int):
