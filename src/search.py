@@ -90,11 +90,12 @@ class Search:
         alpha_orig = alpha  # saving original value for TT-related stuff later
 
         for i, move in enumerate(possible_moves):
+            is_capture = move.is_capture(board)
             board.apply(move)
             new_depth = depth - 1
 
             # LMR: reduce depth for late quiet moves
-            if i >= 3 and depth >= 3 and not move.is_capture(board) and not in_check:
+            if i >= 3 and depth >= 3 and not is_capture and not in_check:
                 new_depth -= 1
 
             # PVS: search PV-node with a full window, other moves with a zero window
